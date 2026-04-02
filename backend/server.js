@@ -5,6 +5,8 @@ import authRoutes from "./routes/auth.js";
 import vehiclesRoutes from "./routes/vehicles.js";
 import servicesRoutes from "./routes/services.js";
 import remindersRoutes from "./routes/reminders.js";
+import callsRoutes from "./routes/calls.js";
+import reportsRoutes from "./routes/reports.js";
 import pool from "./db.js";
 import { authMiddleware } from "./middleware/auth.js";
 
@@ -30,11 +32,24 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
     const [[pend]] = await pool.query(
       `SELECT COUNT(*) AS c FROM reminders r
        INNER JOIN service_records sr ON sr.id = r.service_record_id
+       INNER JOIN vehicles v ON v.id = r.vehicle_id
        WHERE r.status = 'PENDING'
-       AND sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)`
+       AND (
+         sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+         OR sr.next_due_date < CURDATE()
+         OR (
+           GREATEST(
+             0,
+             CEIL((sr.next_due_km - sr.odometer_km) / GREATEST(v.avg_daily_km, 0.01))
+             - DATEDIFF(CURDATE(), sr.service_date)
+           ) <= 7
+         )
+       )`
     );
-    const [[fu]] = await pool.query(
-      `SELECT COUNT(*) AS c FROM service_records WHERE followup_call_done = 0`
+    const [[fu]] = await pool.query(`SELECT COUNT(*) AS c FROM service_records WHERE followup_call_done = 0`);
+    const [[callsMonth]] = await pool.query(
+      `SELECT COUNT(*) AS c FROM call_records
+       WHERE YEAR(called_at) = YEAR(CURDATE()) AND MONTH(called_at) = MONTH(CURDATE())`
     );
     const [recent] = await pool.query(
       `SELECT sr.*, v.vehicle_number, v.owner_name
@@ -45,13 +60,36 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
     );
     const [upcoming] = await pool.query(
       `SELECT r.id AS reminder_id, r.status, r.reminder_date,
-              sr.next_due_date, v.vehicle_number, v.owner_name, v.owner_phone,
-              DATEDIFF(sr.next_due_date, CURDATE()) AS days_left
+              sr.job_card_no, sr.next_due_date, v.vehicle_number, v.owner_name, v.owner_phone,
+              DATEDIFF(sr.next_due_date, CURDATE()) AS days_left_calendar,
+              GREATEST(
+                0,
+                CEIL((sr.next_due_km - sr.odometer_km) / GREATEST(v.avg_daily_km, 0.01))
+                - DATEDIFF(CURDATE(), sr.service_date)
+              ) AS days_left_km_track,
+              LEAST(
+                DATEDIFF(sr.next_due_date, CURDATE()),
+                GREATEST(
+                  0,
+                  CEIL((sr.next_due_km - sr.odometer_km) / GREATEST(v.avg_daily_km, 0.01))
+                  - DATEDIFF(CURDATE(), sr.service_date)
+                )
+              ) AS days_left
        FROM reminders r
        INNER JOIN service_records sr ON sr.id = r.service_record_id
        INNER JOIN vehicles v ON v.id = r.vehicle_id
        WHERE r.status = 'PENDING'
-       AND sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+       AND (
+         sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+         OR sr.next_due_date < CURDATE()
+         OR (
+           GREATEST(
+             0,
+             CEIL((sr.next_due_km - sr.odometer_km) / GREATEST(v.avg_daily_km, 0.01))
+             - DATEDIFF(CURDATE(), sr.service_date)
+           ) <= 7
+         )
+       )
        ORDER BY sr.next_due_date ASC
        LIMIT 20`
     );
@@ -60,6 +98,7 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
       servicesThisMonth: month.c,
       pendingReminders: pend.c,
       followupDue: fu.c,
+      callsThisMonth: callsMonth.c,
       recentServices: recent,
       upcomingReminders: upcoming,
     });
@@ -72,6 +111,8 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
 app.use("/api/vehicles", vehiclesRoutes);
 app.use("/api/services", servicesRoutes);
 app.use("/api/reminders", remindersRoutes);
+app.use("/api/calls", callsRoutes);
+app.use("/api/reports", reportsRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });

@@ -51,3 +51,23 @@ CREATE TABLE IF NOT EXISTS reminders (
   INDEX idx_reminder_date (reminder_date),
   INDEX idx_status (status)
 );
+
+CREATE TABLE IF NOT EXISTS call_records (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  vehicle_id INT NOT NULL,
+  service_record_id INT NULL,
+  reminder_id INT NULL,
+  outcome ENUM('CONTACTED','NO_ANSWER','CALLBACK_REQUESTED','RESCHEDULED','ADJUSTED_DUE','OTHER') NOT NULL DEFAULT 'CONTACTED',
+  notes TEXT,
+  previous_next_due_date DATE NULL,
+  new_next_due_date DATE NULL,
+  previous_next_due_km INT NULL,
+  new_next_due_km INT NULL,
+  called_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  user_id INT NULL,
+  FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE,
+  FOREIGN KEY (service_record_id) REFERENCES service_records(id) ON DELETE SET NULL,
+  FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_call_vehicle_time (vehicle_id, called_at)
+);

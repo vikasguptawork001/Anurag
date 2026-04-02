@@ -40,20 +40,20 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4 py-10 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4 py-10 sm:px-6 lg:px-8 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-white/10 bg-white/95 p-6 shadow-2xl backdrop-blur sm:p-8 lg:p-10">
+        <div className="rounded-2xl border border-white/10 bg-white/95 p-6 shadow-2xl backdrop-blur dark:border-slate-600 dark:bg-slate-900/95 sm:p-8 lg:p-10">
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-bajaj-orange sm:text-3xl">
               Bajaj Service Center
             </h1>
-            <p className="mt-2 text-sm text-slate-600 sm:text-base">
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 sm:text-base">
               Sign in to manage vehicles and services
             </p>
           </div>
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="username" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Username
               </label>
               <input
@@ -62,12 +62,12 @@ export default function Login() {
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 shadow-sm focus:border-bajaj-orange focus:outline-none focus:ring-2 focus:ring-bajaj-orange/30"
+                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-bajaj-orange focus:outline-none focus:ring-2 focus:ring-bajaj-orange/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 placeholder="Enter username"
               />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Password
               </label>
               <input
@@ -77,7 +77,7 @@ export default function Login() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 shadow-sm focus:border-bajaj-orange focus:outline-none focus:ring-2 focus:ring-bajaj-orange/30"
+                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 shadow-sm focus:border-bajaj-orange focus:outline-none focus:ring-2 focus:ring-bajaj-orange/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                 placeholder="Enter password"
               />
             </div>

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import html2pdf from "html2pdf.js";
 import { api } from "../api/axios.js";
 import ServiceHistoryPdfTemplate from "../components/pdf/ServiceHistoryPdfTemplate.jsx";
 import Spinner from "../components/Spinner.jsx";
+import ExportButtons from "../components/ExportButtons.jsx";
 import { formatDisplayDate, formatKm } from "../lib/format.js";
 
 function SearchIcon(props) {
@@ -112,6 +113,24 @@ export default function VehicleHistory() {
     setResults([]);
   };
 
+  const historyExportRows = useMemo(
+    () =>
+      history.map((row, idx) => ({
+        row: idx + 1,
+        job_card: row.job_card_no,
+        date: formatDisplayDate(row.service_date),
+        odometer_km: row.odometer_km,
+        type: row.service_type,
+        work: row.work_done ?? "",
+        parts: row.parts_replaced ?? "",
+        next_km: row.next_due_km,
+        next_due: formatDisplayDate(row.next_due_date),
+        feedback: row.feedback ?? "",
+        followup: row.followup_call_done ? "Done" : "No",
+      })),
+    [history]
+  );
+
   return (
     <div className="flex min-h-0 flex-col gap-5 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:items-start xl:gap-6">
       {selected && history.length > 0 ? (
@@ -130,20 +149,20 @@ export default function VehicleHistory() {
       ) : null}
 
       <div className="min-w-0 space-y-4 xl:sticky xl:top-0">
-        <header className="border-b border-slate-200 pb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Records</p>
-          <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+        <header className="border-b border-slate-200 pb-4 dark:border-slate-700">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">Records</p>
+          <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
             Vehicle service history
           </h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             Search, open a register — on large screens the register stays beside lookup to reduce scrolling.
           </p>
         </header>
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
-            <h2 className="text-sm font-semibold text-slate-900">Vehicle lookup</h2>
-            <p className="text-xs text-slate-500">Registration or owner name</p>
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/80 sm:px-5">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Vehicle lookup</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Registration or owner name</p>
           </div>
           <div className="p-4 sm:p-5">
             <div className="relative">
@@ -160,14 +179,14 @@ export default function VehicleHistory() {
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Registration no. or owner name"
                 autoComplete="off"
-                className="block w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-11 pr-20 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-bajaj-orange focus:outline-none focus:ring-2 focus:ring-bajaj-orange/20"
+                className="block w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-11 pr-20 text-sm text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-bajaj-orange focus:outline-none focus:ring-2 focus:ring-bajaj-orange/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
               <div className="absolute inset-y-0 right-1 flex items-center">
                 {q ? (
                   <button
                     type="button"
                     onClick={clearSearch}
-                    className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                    className="rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Clear
                   </button>
@@ -175,58 +194,58 @@ export default function VehicleHistory() {
               </div>
             </div>
             {searching && q.trim() ? (
-              <p className="mt-2 text-xs font-medium text-slate-500">Searching…</p>
+              <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">Searching…</p>
             ) : null}
 
             {!q.trim() ? (
-              <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center text-sm text-slate-600">
+              <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-300">
                 Type to search the vehicle directory.
               </p>
             ) : null}
 
             {q.trim() && !searching && results.length === 0 ? (
-              <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-5 text-center text-sm text-slate-700">
+              <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-5 text-center text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200">
                 No matches — try another term.
               </p>
             ) : null}
 
             {q.trim() && results.length > 0 ? (
-              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                <div className="border-b border-slate-200 bg-slate-100 px-3 py-2 sm:px-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-600">
+                <div className="border-b border-slate-200 bg-slate-100 px-3 py-2 dark:border-slate-600 dark:bg-slate-800 sm:px-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                     Results ({results.length})
                   </p>
                 </div>
                 <div className="max-h-[min(280px,calc(100dvh-22rem))] overflow-auto scrollbar-thin">
                   <table className="min-w-full border-collapse text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                      <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+                    <thead className="sticky top-0 z-10 bg-white shadow-sm dark:bg-slate-900">
+                      <tr className="border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-600 dark:text-slate-300">
                         <th className="whitespace-nowrap px-3 py-2 sm:px-4">Reg.</th>
                         <th className="whitespace-nowrap px-3 py-2 sm:px-4">Owner</th>
                         <th className="hidden whitespace-nowrap px-3 py-2 sm:table-cell sm:px-4">Phone</th>
                         <th className="whitespace-nowrap px-3 py-2 text-right sm:px-4"> </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                       {results.map((v) => (
                         <tr
                           key={v.id}
-                          className={`transition-colors hover:bg-orange-50/60 ${
-                            selected?.id === v.id ? "bg-orange-50/90" : ""
+                          className={`transition-colors hover:bg-orange-50/60 dark:hover:bg-slate-800/80 ${
+                            selected?.id === v.id ? "bg-orange-50/90 dark:bg-slate-800" : ""
                           }`}
                         >
-                          <td className="whitespace-nowrap px-3 py-2 font-semibold tabular-nums text-slate-900 sm:px-4">
+                          <td className="whitespace-nowrap px-3 py-2 font-semibold tabular-nums text-slate-900 dark:text-slate-100 sm:px-4">
                             {v.vehicle_number}
                           </td>
-                          <td className="max-w-[10rem] truncate px-3 py-2 text-slate-800 sm:px-4">{v.owner_name}</td>
-                          <td className="hidden whitespace-nowrap px-3 py-2 text-slate-700 sm:table-cell sm:px-4">
+                          <td className="max-w-[10rem] truncate px-3 py-2 text-slate-800 dark:text-slate-200 sm:px-4">{v.owner_name}</td>
+                          <td className="hidden whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-300 sm:table-cell sm:px-4">
                             {v.owner_phone || "—"}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right sm:px-4">
                             <button
                               type="button"
                               onClick={() => loadHistory(v)}
-                              className="inline-flex h-8 min-w-[6.5rem] items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 shadow-sm hover:border-bajaj-orange hover:text-bajaj-dark"
+                              className="inline-flex h-8 min-w-[6.5rem] items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 shadow-sm hover:border-bajaj-orange hover:text-bajaj-dark dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                             >
                               Open
                             </button>
@@ -244,14 +263,14 @@ export default function VehicleHistory() {
 
       <div className="min-h-0 min-w-0 xl:sticky xl:top-0 xl:max-h-[calc(100dvh-5.5rem)] xl:overflow-hidden">
         {!selected ? (
-          <div className="flex h-full min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center xl:min-h-[min(420px,calc(100dvh-8rem))]">
+          <div className="flex h-full min-h-[12rem] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center dark:border-slate-600 dark:bg-slate-900/40 xl:min-h-[min(420px,calc(100dvh-8rem))]">
             <div>
-              <p className="text-sm font-medium text-slate-700">No vehicle selected</p>
-              <p className="mt-1 text-xs text-slate-500">Search and tap Open to load the register here.</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">No vehicle selected</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Search and tap Open to load the register here.</p>
             </div>
           </div>
         ) : (
-          <div className="flex max-h-[min(720px,calc(100dvh-6rem))] flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md xl:max-h-[calc(100dvh-5.5rem)]">
+          <div className="flex max-h-[min(720px,calc(100dvh-6rem))] flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md dark:border-slate-600 dark:bg-slate-900/70 xl:max-h-[calc(100dvh-5.5rem)]">
             <div className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-4 text-white sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
@@ -261,14 +280,22 @@ export default function VehicleHistory() {
                   <h2 className="mt-1 truncate text-xl font-bold sm:text-2xl">{selected.vehicle_number}</h2>
                   <p className="mt-0.5 text-xs text-slate-300">Chronological service history</p>
                 </div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end sm:items-center">
+                  <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
+                    <ExportButtons
+                      rows={historyExportRows}
+                      filenameBase={`Vehicle_${selected.vehicle_number}_register`}
+                      pdfTitle={`Service register — ${selected.vehicle_number}`}
+                      sheetName="History"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={exportPdf}
                     disabled={exporting || !history.length}
                     className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-white/25 bg-white/10 px-4 text-sm font-semibold text-white backdrop-blur hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[11rem]"
                   >
-                    {exporting ? "Preparing PDF…" : "Export PDF"}
+                    {exporting ? "Preparing PDF…" : "Formal PDF"}
                   </button>
                 </div>
               </div>
@@ -287,15 +314,15 @@ export default function VehicleHistory() {
                       : "—",
                 },
               ].map((cell) => (
-                <div key={cell.k} className="bg-white px-3 py-2.5 sm:px-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{cell.k}</p>
-                  <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">{cell.v}</p>
+                <div key={cell.k} className="bg-white px-3 py-2.5 dark:bg-slate-900 sm:px-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{cell.k}</p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{cell.v}</p>
                 </div>
               ))}
             </div>
 
-            <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-2 sm:px-6">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">Service register</h3>
+            <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-2 dark:border-slate-600 dark:bg-slate-800/80 sm:px-6">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Service register</h3>
             </div>
 
             {loadingHistory ? (
@@ -305,12 +332,12 @@ export default function VehicleHistory() {
             ) : (
               <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">
                 {!history.length ? (
-                  <p className="p-8 text-center text-sm text-slate-600">No service records for this vehicle.</p>
+                  <p className="p-8 text-center text-sm text-slate-600 dark:text-slate-400">No service records for this vehicle.</p>
                 ) : (
                   <table className="min-w-[1000px] w-full border-collapse text-left text-sm">
-                    <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] font-semibold uppercase tracking-wider text-slate-600 shadow-sm">
-                      <tr className="border-b border-slate-200">
-                        <th className="sticky left-0 z-20 whitespace-nowrap border-r border-slate-200 bg-slate-100 px-2 py-2 text-center">
+                    <thead className="sticky top-0 z-10 bg-slate-100 text-[10px] font-semibold uppercase tracking-wider text-slate-600 shadow-sm dark:bg-slate-800 dark:text-slate-300">
+                      <tr className="border-b border-slate-200 dark:border-slate-600">
+                        <th className="sticky left-0 z-20 whitespace-nowrap border-r border-slate-200 bg-slate-100 px-2 py-2 text-center dark:border-slate-600 dark:bg-slate-800">
                           #
                         </th>
                         <th className="whitespace-nowrap px-2 py-2">Job card</th>
@@ -325,46 +352,46 @@ export default function VehicleHistory() {
                         <th className="whitespace-nowrap px-2 py-2">F/U</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                       {history.map((row, idx) => (
-                        <tr key={row.id} className="border-b border-slate-100 bg-white hover:bg-orange-50/30">
-                          <td className="sticky left-0 z-[1] whitespace-nowrap border-r border-slate-200 bg-white px-2 py-2 text-center text-xs font-semibold tabular-nums text-slate-700">
+                        <tr key={row.id} className="border-b border-slate-100 bg-white hover:bg-orange-50/30 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:bg-slate-800/60">
+                          <td className="sticky left-0 z-[1] whitespace-nowrap border-r border-slate-200 bg-white px-2 py-2 text-center text-xs font-semibold tabular-nums text-slate-700 dark:border-slate-600 dark:bg-slate-900">
                             {idx + 1}
                           </td>
-                          <td className="whitespace-nowrap px-2 py-2 font-mono text-xs text-slate-900">{row.job_card_no}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-slate-800">
+                          <td className="whitespace-nowrap px-2 py-2 font-mono text-xs text-slate-900 dark:text-slate-100">{row.job_card_no}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-slate-800 dark:text-slate-200">
                             {formatDisplayDate(row.service_date)}
                           </td>
-                          <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-slate-800">
+                          <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">
                             {formatKm(row.odometer_km)}
                           </td>
                           <td className="whitespace-nowrap px-2 py-2">
                             <span
                               className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${
                                 row.service_type === "FREE"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                  : "border-amber-200 bg-amber-50 text-amber-900"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200"
+                                  : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
                               }`}
                             >
                               {row.service_type}
                             </span>
                           </td>
-                          <td className="max-w-[14rem] px-2 py-2 align-top text-xs text-slate-700">{row.work_done || "—"}</td>
-                          <td className="max-w-[14rem] px-2 py-2 align-top text-xs text-slate-700">
+                          <td className="max-w-[14rem] px-2 py-2 align-top text-xs text-slate-700 dark:text-slate-300">{row.work_done || "—"}</td>
+                          <td className="max-w-[14rem] px-2 py-2 align-top text-xs text-slate-700 dark:text-slate-300">
                             {row.parts_replaced || "—"}
                           </td>
-                          <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-slate-800">
+                          <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">
                             {row.next_due_km != null ? Number(row.next_due_km).toLocaleString("en-IN") : "—"}
                           </td>
-                          <td className="whitespace-nowrap px-2 py-2 text-slate-800">
+                          <td className="whitespace-nowrap px-2 py-2 text-slate-800 dark:text-slate-200">
                             {formatDisplayDate(row.next_due_date)}
                           </td>
-                          <td className="max-w-[10rem] px-2 py-2 align-top text-xs text-slate-700">{row.feedback || "—"}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-xs text-slate-800">
+                          <td className="max-w-[10rem] px-2 py-2 align-top text-xs text-slate-700 dark:text-slate-300">{row.feedback || "—"}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-xs text-slate-800 dark:text-slate-200">
                             {row.followup_call_done ? (
-                              <span className="font-semibold text-emerald-700">Done</span>
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-400">Done</span>
                             ) : (
-                              <span className="font-semibold text-amber-800">No</span>
+                              <span className="font-semibold text-amber-800 dark:text-amber-300">No</span>
                             )}
                           </td>
                         </tr>
@@ -375,7 +402,7 @@ export default function VehicleHistory() {
               </div>
             )}
 
-            <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 text-center text-[10px] text-slate-500 sm:px-6">
+            <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 text-center text-[10px] text-slate-500 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-400 sm:px-6">
               Bajaj Service Center — for official use only
             </div>
           </div>

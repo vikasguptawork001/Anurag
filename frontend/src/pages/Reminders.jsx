@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { api } from "../api/axios.js";
 import Spinner from "../components/Spinner.jsx";
 import ReminderCard from "../components/ReminderCard.jsx";
+import ExportButtons from "../components/ExportButtons.jsx";
 
 function urgencyFromDays(daysLeft) {
   if (daysLeft == null) return "scheduled";
@@ -64,16 +66,55 @@ export default function Reminders() {
     }
   };
 
+  const exportRows = useMemo(
+    () =>
+      rows.map((r) => ({
+        vehicle: r.vehicle_number,
+        owner: r.owner_name,
+        phone: r.owner_phone || "",
+        reminder_on: r.reminder_date,
+        due_date: r.next_due_date,
+        days_left: r.days_left,
+        days_calendar: r.days_left_calendar,
+        days_km: r.days_left_km_track,
+        km_remaining: r.km_remaining,
+        avg_km_day: r.avg_daily_km,
+        job_card: r.job_card_no,
+      })),
+    [rows]
+  );
+
   return (
     <div className="flex min-h-0 flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Follow-up</p>
-          <h1 className="mt-0.5 text-xl font-bold text-slate-900 sm:text-2xl">Reminders</h1>
-          <p className="mt-1 text-sm text-slate-600">Nearest due dates first.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            Follow-up
+          </p>
+          <h1 className="mt-0.5 text-xl font-bold text-slate-900 dark:text-white sm:text-2xl">Reminders</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Dual track: <strong className="font-semibold">calendar due</strong> and{" "}
+            <strong className="font-semibold">km / average running</strong> estimate.
+          </p>
+          <Link
+            to="/calls"
+            className="mt-2 inline-flex text-sm font-semibold text-bajaj-orange hover:underline"
+          >
+            Open call center to log outreach &amp; adjust due dates →
+          </Link>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[20rem] sm:items-end">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-right">Filter</p>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:justify-end">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Filter
+            </span>
+            <ExportButtons
+              rows={exportRows}
+              filenameBase={`reminders_${filter}_${new Date().toISOString().slice(0, 10)}`}
+              pdfTitle="Reminders export"
+              sheetName="Reminders"
+            />
+          </div>
           <div className="flex flex-wrap gap-2 sm:justify-end">
             {filters.map((f) => (
               <button
@@ -83,7 +124,7 @@ export default function Reminders() {
                 className={`inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg px-3 text-xs font-semibold transition sm:text-sm ${
                   filter === f.id
                     ? "bg-bajaj-orange text-white shadow-sm"
-                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 }`}
               >
                 {f.label}
@@ -96,14 +137,18 @@ export default function Reminders() {
       {loading ? (
         <Spinner label="Loading reminders…" />
       ) : (
-        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5 sm:px-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Reminder list</p>
-            <span className="text-xs tabular-nums text-slate-500">{rows.length} item{rows.length === 1 ? "" : "s"}</span>
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/80 sm:px-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+              Reminder list
+            </p>
+            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+              {rows.length} item{rows.length === 1 ? "" : "s"}
+            </span>
           </div>
           <div className="max-h-[min(520px,calc(100dvh-13rem))] overflow-y-auto overscroll-contain p-3 sm:p-4 scrollbar-thin">
             {!rows.length ? (
-              <p className="py-12 text-center text-sm text-slate-600">No reminders for this filter.</p>
+              <p className="py-12 text-center text-sm text-slate-600 dark:text-slate-400">No reminders for this filter.</p>
             ) : (
               <div className="space-y-3">
                 {rows.map((r) => (
@@ -114,6 +159,8 @@ export default function Reminders() {
                     phone={r.owner_phone}
                     dueDate={r.next_due_date}
                     daysLeft={r.days_left}
+                    daysLeftCalendar={r.days_left_calendar}
+                    daysLeftKmTrack={r.days_left_km_track}
                     urgency={urgencyFromDays(r.days_left)}
                     onDismiss={() => dismiss(r.reminder_id)}
                     dismissing={dismissingId === r.reminder_id}
