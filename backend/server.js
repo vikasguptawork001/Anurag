@@ -9,6 +9,7 @@ import callsRoutes from "./routes/calls.js";
 import reportsRoutes from "./routes/reports.js";
 import pool from "./db.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { runMigrations } from "./migrate.js";
 
 dotenv.config();
 
@@ -27,13 +28,15 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
     const [[v]] = await pool.query("SELECT COUNT(*) AS c FROM vehicles");
     const [[month]] = await pool.query(
       `SELECT COUNT(*) AS c FROM service_records
-       WHERE YEAR(service_date) = YEAR(CURDATE()) AND MONTH(service_date) = MONTH(CURDATE())`
+       WHERE archived_at IS NULL
+       AND YEAR(service_date) = YEAR(CURDATE()) AND MONTH(service_date) = MONTH(CURDATE())`
     );
     const [[pend]] = await pool.query(
       `SELECT COUNT(*) AS c FROM reminders r
        INNER JOIN service_records sr ON sr.id = r.service_record_id
        INNER JOIN vehicles v ON v.id = r.vehicle_id
        WHERE r.status = 'PENDING'
+       AND sr.archived_at IS NULL AND v.archived_at IS NULL
        AND (
          sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
          OR sr.next_due_date < CURDATE()
@@ -46,15 +49,19 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
          )
        )`
     );
-    const [[fu]] = await pool.query(`SELECT COUNT(*) AS c FROM service_records WHERE followup_call_done = 0`);
+    const [[fu]] = await pool.query(
+      `SELECT COUNT(*) AS c FROM service_records WHERE archived_at IS NULL AND followup_call_done = 0`
+    );
     const [[callsMonth]] = await pool.query(
       `SELECT COUNT(*) AS c FROM call_records
-       WHERE YEAR(called_at) = YEAR(CURDATE()) AND MONTH(called_at) = MONTH(CURDATE())`
+       WHERE archived_at IS NULL
+       AND YEAR(called_at) = YEAR(CURDATE()) AND MONTH(called_at) = MONTH(CURDATE())`
     );
     const [recent] = await pool.query(
       `SELECT sr.*, v.vehicle_number, v.owner_name
        FROM service_records sr
        JOIN vehicles v ON v.id = sr.vehicle_id
+       WHERE sr.archived_at IS NULL AND v.archived_at IS NULL
        ORDER BY sr.created_at DESC
        LIMIT 10`
     );
@@ -79,6 +86,7 @@ app.get("/api/dashboard/stats", authMiddleware, async (_req, res) => {
        INNER JOIN service_records sr ON sr.id = r.service_record_id
        INNER JOIN vehicles v ON v.id = r.vehicle_id
        WHERE r.status = 'PENDING'
+       AND sr.archived_at IS NULL AND v.archived_at IS NULL
        AND (
          sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
          OR sr.next_due_date < CURDATE()
@@ -119,6 +127,14 @@ app.use((_req, res) => {
 });
 
 const PORT = Number(process.env.PORT) || 5000;
-app.listen(PORT, () => {
-  console.log(`Bajaj Service API listening on port ${PORT}`);
-});
+
+runMigrations()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Bajaj Service API listening on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Migration failed:", err);
+    process.exit(1);
+  });

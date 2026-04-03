@@ -22,6 +22,20 @@ function dualDueFilterSql(aliasPrefix = "") {
   )`;
 }
 
+/** Same LEAST(...) as in SELECT for consistent window filters. */
+function daysLeftExpr(aliasPrefix = "") {
+  const sr = `${aliasPrefix}sr`;
+  const v = `${aliasPrefix}v`;
+  return `LEAST(
+    DATEDIFF(${sr}.next_due_date, CURDATE()),
+    GREATEST(
+      0,
+      CEIL((${sr}.next_due_km - ${sr}.odometer_km) / GREATEST(${v}.avg_daily_km, 0.01))
+      - DATEDIFF(CURDATE(), ${sr}.service_date)
+    )
+  )`;
+}
+
 router.get("/", async (req, res) => {
   try {
     const filter = (req.query.filter || "all").toLowerCase();
@@ -29,7 +43,13 @@ router.get("/", async (req, res) => {
     if (filter === "week") {
       extra = `AND sr.next_due_date >= CURDATE() AND sr.next_due_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)`;
     } else if (filter === "overdue") {
-      extra = `AND sr.next_due_date < CURDATE()`;
+      extra = `AND (${daysLeftExpr()}) < 0`;
+    } else if (filter === "lt14") {
+      extra = `AND (${daysLeftExpr()}) <= 14`;
+    } else if (filter === "lt7") {
+      extra = `AND (${daysLeftExpr()}) <= 7`;
+    } else if (filter === "lt3") {
+      extra = `AND (${daysLeftExpr()}) <= 3`;
     } else {
       extra = `AND ${dualDueFilterSql()}`;
     }
@@ -59,6 +79,7 @@ router.get("/", async (req, res) => {
        INNER JOIN service_records sr ON sr.id = r.service_record_id
        INNER JOIN vehicles v ON v.id = r.vehicle_id
        WHERE r.status = 'PENDING'
+       AND sr.archived_at IS NULL AND v.archived_at IS NULL
        ${extra}
        ORDER BY sr.next_due_date ASC, r.reminder_date ASC`
     );

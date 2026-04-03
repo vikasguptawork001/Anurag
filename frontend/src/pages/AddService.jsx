@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { api } from "../api/axios.js";
 import Spinner from "../components/Spinner.jsx";
 import { estimateNextDueDate, todayLocal } from "../lib/dates.js";
+import { formatDisplayDate, formatKm } from "../lib/format.js";
 
 export default function AddService() {
   const [vehicles, setVehicles] = useState([]);
@@ -26,9 +27,13 @@ export default function AddService() {
   const [workDone, setWorkDone] = useState("");
   const [partsReplaced, setPartsReplaced] = useState("");
   const [nextDueKm, setNextDueKm] = useState("");
+  const [nextDueDate, setNextDueDate] = useState("");
+  const [dueDateManual, setDueDateManual] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [followupDone, setFollowupDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [priorServices, setPriorServices] = useState([]);
+  const [loadingPrior, setLoadingPrior] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +68,44 @@ export default function AddService() {
     effectiveAvg
   );
 
+  useEffect(() => {
+    if (!dueDateManual && estimatedDue) {
+      setNextDueDate(estimatedDue);
+    }
+  }, [estimatedDue, dueDateManual]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!vehicleId || showNewVehicle) {
+      setPriorServices([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setLoadingPrior(true);
+    (async () => {
+      try {
+        const { data } = await api.get(`/api/services/${vehicleId}`);
+        if (!cancelled) setPriorServices(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setPriorServices([]);
+      } finally {
+        if (!cancelled) setLoadingPrior(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vehicleId, showNewVehicle]);
+
+  const lastService = priorServices.length
+    ? priorServices.reduce((a, b) => {
+        const da = new Date(a.service_date);
+        const db = new Date(b.service_date);
+        return db >= da ? b : a;
+      })
+    : null;
+
   const resolveVehicle = async (num) => {
     const n = num.trim().toUpperCase();
     if (!n) {
@@ -77,6 +120,7 @@ export default function AddService() {
       setAvgKm(Number(local.avg_daily_km) || 10);
       setResolvedVehicle(local);
       setShowNewVehicle(false);
+      setDueDateManual(false);
       return;
     }
     try {
@@ -85,6 +129,10 @@ export default function AddService() {
       setAvgKm(Number(data.avg_daily_km) || 10);
       setResolvedVehicle(data);
       setShowNewVehicle(false);
+      setDueDateManual(false);
+      if (data.archived_at) {
+        toast.error("This vehicle is archived. Restore it from records before adding services.");
+      }
     } catch {
       setVehicleId(null);
       setResolvedVehicle(null);
@@ -102,6 +150,7 @@ export default function AddService() {
     setAvgKm(Number(v.avg_daily_km) || 10);
     setResolvedVehicle(v);
     setShowNewVehicle(false);
+    setDueDateManual(false);
   };
 
   const handleSubmit = async (e) => {
@@ -136,6 +185,11 @@ export default function AddService() {
           setShowNewVehicle(true);
         }
       }
+    }
+
+    if (resolvedSnap?.archived_at) {
+      toast.error("Cannot add service to an archived vehicle.");
+      return;
     }
 
     if (!vid) {
@@ -211,6 +265,7 @@ export default function AddService() {
         work_done: workDone.trim() || undefined,
         parts_replaced: partsReplaced.trim() || undefined,
         next_due_km: nextKm,
+        next_due_date: nextDueDate.trim() || undefined,
         feedback: feedback.trim() || undefined,
         followup_call_done: followupDone,
       });
@@ -220,8 +275,14 @@ export default function AddService() {
       setWorkDone("");
       setPartsReplaced("");
       setNextDueKm("");
+      setNextDueDate("");
+      setDueDateManual(false);
       setFeedback("");
       setFollowupDone(false);
+      if (vehicleId === vid) {
+        const { data } = await api.get(`/api/services/${vid}`);
+        setPriorServices(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -285,11 +346,65 @@ export default function AddService() {
               )}
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-600 dark:bg-slate-800/50 lg:col-span-5">
-              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Estimated next due date</p>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">From odometer, next due KM, avg km.</p>
-              <p className="mt-2 text-lg font-bold tabular-nums text-bajaj-orange">{estimatedDue || "—"}</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Next due (calendar)</p>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Syncs from KM estimate until you edit. Reminders use whichever due comes first: date or km-based track.
+              </p>
+              <input
+                type="date"
+                value={nextDueDate}
+                onChange={(e) => {
+                  setDueDateManual(true);
+                  setNextDueDate(e.target.value);
+                }}
+                className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                Suggested from km: <span className="font-semibold text-slate-700 dark:text-slate-200">{estimatedDue || "—"}</span>
+              </p>
             </div>
           </div>
+
+          {resolvedVehicle?.archived_at ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+              This vehicle is archived and cannot receive new job cards until it is restored.
+            </div>
+          ) : null}
+
+          {vehicleId && !showNewVehicle && (loadingPrior || priorServices.length > 0) ? (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-600 dark:bg-slate-900/50">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Existing data for this vehicle
+              </p>
+              {loadingPrior ? (
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Loading history…</p>
+              ) : lastService ? (
+                <div className="mt-3 grid gap-2 text-sm text-slate-800 dark:text-slate-200 sm:grid-cols-2">
+                  <p>
+                    <span className="text-slate-500 dark:text-slate-400">Records on file:</span>{" "}
+                    <span className="font-semibold">{priorServices.length}</span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500 dark:text-slate-400">Last job card:</span>{" "}
+                    <span className="font-mono font-semibold">{lastService.job_card_no}</span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500 dark:text-slate-400">Last service:</span>{" "}
+                    {formatDisplayDate(lastService.service_date)} · {formatKm(lastService.odometer_km)}
+                  </p>
+                  <p>
+                    <span className="text-slate-500 dark:text-slate-400">Last next due:</span>{" "}
+                    {lastService.next_due_km != null
+                      ? `${Number(lastService.next_due_km).toLocaleString("en-IN")} km`
+                      : "—"}{" "}
+                    · {formatDisplayDate(lastService.next_due_date)}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">No prior services — first visit.</p>
+              )}
+            </div>
+          ) : null}
 
           {showNewVehicle && (
             <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-800 dark:bg-amber-950/30 sm:p-5">
@@ -483,7 +598,7 @@ export default function AddService() {
           <p className="mr-auto hidden text-xs text-slate-500 dark:text-slate-400 sm:block">All required fields must be filled.</p>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !!resolvedVehicle?.archived_at}
             className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-bajaj-orange px-8 text-sm font-semibold text-white shadow-sm transition hover:bg-bajaj-dark disabled:opacity-60 sm:h-10 sm:w-auto sm:min-w-[12rem]"
           >
             {submitting ? "Saving…" : "Save service record"}

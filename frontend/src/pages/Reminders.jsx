@@ -14,8 +14,11 @@ function urgencyFromDays(daysLeft) {
 }
 
 const filters = [
-  { id: "all", label: "All" },
-  { id: "week", label: "Due this week" },
+  { id: "all", label: "Active window" },
+  { id: "lt14", label: "≤ 14 days" },
+  { id: "lt7", label: "≤ 7 days" },
+  { id: "lt3", label: "≤ 3 days" },
+  { id: "week", label: "Calendar week" },
   { id: "overdue", label: "Overdue" },
 ];
 
@@ -74,6 +77,7 @@ export default function Reminders() {
         phone: r.owner_phone || "",
         reminder_on: r.reminder_date,
         due_date: r.next_due_date,
+        next_due_km: r.next_due_km,
         days_left: r.days_left,
         days_calendar: r.days_left_calendar,
         days_km: r.days_left_km_track,
@@ -158,6 +162,8 @@ export default function Reminders() {
                     ownerName={r.owner_name}
                     phone={r.owner_phone}
                     dueDate={r.next_due_date}
+                    nextDueKm={r.next_due_km}
+                    kmRemaining={r.km_remaining}
                     daysLeft={r.days_left}
                     daysLeftCalendar={r.days_left_calendar}
                     daysLeftKmTrack={r.days_left_km_track}

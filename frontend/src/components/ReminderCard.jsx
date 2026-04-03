@@ -3,6 +3,8 @@ export default function ReminderCard({
   ownerName,
   phone,
   dueDate,
+  nextDueKm,
+  kmRemaining,
   daysLeft,
   daysLeftCalendar,
   daysLeftKmTrack,
@@ -55,15 +57,29 @@ export default function ReminderCard({
             </a>
           ) : null}
           <p className={`mt-2 text-slate-500 dark:text-slate-400 ${compact ? "text-xs" : "text-sm"}`}>
-            Due: <span className="font-medium text-slate-800 dark:text-slate-100">{dueDate}</span>
+            Next due date:{" "}
+            <span className="font-medium text-slate-800 dark:text-slate-100">{dueDate ?? "—"}</span>
+            {nextDueKm != null && (
+              <span className="ml-2 tabular-nums text-slate-600 dark:text-slate-300">
+                · Next due km: {Number(nextDueKm).toLocaleString("en-IN")}
+                {kmRemaining != null && (
+                  <span className="text-slate-500">
+                    {" "}
+                    ({Number(kmRemaining).toLocaleString("en-IN")} km left)
+                  </span>
+                )}
+              </span>
+            )}
+          </p>
+          <p className={`mt-1 text-slate-500 dark:text-slate-400 ${compact ? "text-xs" : "text-sm"}`}>
             {cal != null && (
-              <span className="ml-2 tabular-nums">
-                (cal: {cal < 0 ? `${Math.abs(cal)}d overdue` : `${cal}d`})
+              <span className="tabular-nums">
+                Calendar: {cal < 0 ? `${Math.abs(cal)}d overdue` : `${cal}d`}
               </span>
             )}
             {kmD != null && (
               <span className="ml-2 tabular-nums text-slate-600 dark:text-slate-400">
-                · km track: {kmD < 0 ? `${Math.abs(kmD)}d overdue` : `${kmD}d`}
+                · Km-based: {kmD < 0 ? `${Math.abs(kmD)}d overdue` : `${kmD}d`}
               </span>
             )}
           </p>

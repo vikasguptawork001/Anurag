@@ -25,6 +25,9 @@ export default function VehicleHistory() {
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [archivingId, setArchivingId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,13 +78,23 @@ export default function VehicleHistory() {
     }
     setExporting(true);
     setPdfGeneratedAtIso(new Date().toISOString());
-    window.setTimeout(() => {
+    const run = () => {
       const el = pdfTemplateRef.current;
       if (!el) {
         toast.error("PDF template not ready");
         setExporting(false);
         return;
       }
+      const clone = el.cloneNode(true);
+      clone.style.position = "fixed";
+      clone.style.left = "0";
+      clone.style.top = "0";
+      clone.style.width = "1123px";
+      clone.style.background = "#ffffff";
+      clone.style.zIndex = "2147483647";
+      clone.style.opacity = "1";
+      clone.style.pointerEvents = "none";
+      document.body.appendChild(clone);
       const opt = {
         margin: [10, 10, 10, 10],
         filename: `Service-History_${selected.vehicle_number}.pdf`,
@@ -98,19 +111,72 @@ export default function VehicleHistory() {
       };
       html2pdf()
         .set(opt)
-        .from(el)
+        .from(clone)
         .save()
-        .then(() => setExporting(false))
+        .then(() => {
+          document.body.removeChild(clone);
+          setExporting(false);
+          toast.success("PDF downloaded");
+        })
         .catch(() => {
+          if (clone.parentNode) document.body.removeChild(clone);
           toast.error("Could not generate PDF");
           setExporting(false);
         });
-    }, 120);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(run));
   };
 
   const clearSearch = () => {
     setQ("");
     setResults([]);
+  };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    if (!editing) return;
+    setSavingEdit(true);
+    try {
+      const { data } = await api.patch(`/api/services/record/${editing.id}`, {
+        job_card_no: editing.job_card_no,
+        service_date: editing.service_date,
+        odometer_km: Number(editing.odometer_km),
+        service_type: editing.service_type,
+        work_done: editing.work_done || undefined,
+        parts_replaced: editing.parts_replaced || undefined,
+        next_due_km: Number(editing.next_due_km),
+        next_due_date: editing.next_due_date === "" ? "" : editing.next_due_date || undefined,
+        feedback: editing.feedback || undefined,
+        followup_call_done: editing.followup_call_done,
+      });
+      setHistory((prev) => prev.map((r) => (r.id === data.id ? { ...r, ...data } : r)));
+      setEditing(null);
+      toast.success("Record updated");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const archiveRecord = async (row) => {
+    if (
+      !window.confirm(
+        `Archive service record ${row.job_card_no}? It will be hidden from registers but kept in the database.`
+      )
+    ) {
+      return;
+    }
+    setArchivingId(row.id);
+    try {
+      await api.put(`/api/services/record/${row.id}/archive`);
+      setHistory((prev) => prev.filter((r) => r.id !== row.id));
+      toast.success("Record archived");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setArchivingId(null);
+    }
   };
 
   const historyExportRows = useMemo(
@@ -350,6 +416,7 @@ export default function VehicleHistory() {
                         <th className="whitespace-nowrap px-2 py-2">Due</th>
                         <th className="min-w-[6rem] px-2 py-2">Feedback</th>
                         <th className="whitespace-nowrap px-2 py-2">F/U</th>
+                        <th className="whitespace-nowrap px-2 py-2 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -394,6 +461,32 @@ export default function VehicleHistory() {
                               <span className="font-semibold text-amber-800 dark:text-amber-300">No</span>
                             )}
                           </td>
+                          <td className="whitespace-nowrap px-2 py-2 text-right">
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditing({
+                                    ...row,
+                                    next_due_date: row.next_due_date
+                                      ? String(row.next_due_date).slice(0, 10)
+                                      : "",
+                                  })
+                                }
+                                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={archivingId === row.id}
+                                onClick={() => archiveRecord(row)}
+                                className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200"
+                              >
+                                {archivingId === row.id ? "…" : "Archive"}
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -401,6 +494,160 @@ export default function VehicleHistory() {
                 )}
               </div>
             )}
+
+            {editing ? (
+              <div
+                className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+                role="dialog"
+                aria-modal
+                aria-labelledby="edit-sr-title"
+              >
+                <form
+                  onSubmit={saveEdit}
+                  className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-xl border border-slate-200 bg-white shadow-xl dark:border-slate-600 dark:bg-slate-900 sm:rounded-xl"
+                >
+                  <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                    <h2 id="edit-sr-title" className="text-sm font-semibold text-slate-900 dark:text-white">
+                      Edit service record
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(null)}
+                      className="rounded-lg px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:gap-4 sm:p-5">
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Job card</label>
+                      <input
+                        required
+                        value={editing.job_card_no}
+                        onChange={(e) => setEditing((x) => ({ ...x, job_card_no: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Service date</label>
+                      <input
+                        type="date"
+                        required
+                        value={editing.service_date ? String(editing.service_date).slice(0, 10) : ""}
+                        onChange={(e) => setEditing((x) => ({ ...x, service_date: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Odometer (km)</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        value={editing.odometer_km}
+                        onChange={(e) => setEditing((x) => ({ ...x, odometer_km: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Type</label>
+                      <select
+                        value={editing.service_type}
+                        onChange={(e) => setEditing((x) => ({ ...x, service_type: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      >
+                        <option value="PAID">PAID</option>
+                        <option value="FREE">FREE</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Next due (km)</label>
+                      <input
+                        type="number"
+                        required
+                        value={editing.next_due_km}
+                        onChange={(e) => setEditing((x) => ({ ...x, next_due_km: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Next due (date)</label>
+                      <input
+                        type="date"
+                        value={editing.next_due_date || ""}
+                        onChange={(e) => setEditing((x) => ({ ...x, next_due_date: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                      <p className="mt-1 text-[10px] text-slate-500">Leave blank to derive from km · average running.</p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Work done</label>
+                      <textarea
+                        rows={2}
+                        value={editing.work_done || ""}
+                        onChange={(e) => setEditing((x) => ({ ...x, work_done: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Parts</label>
+                      <textarea
+                        rows={2}
+                        value={editing.parts_replaced || ""}
+                        onChange={(e) => setEditing((x) => ({ ...x, parts_replaced: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-300">Feedback</label>
+                      <textarea
+                        rows={2}
+                        value={editing.feedback || ""}
+                        onChange={(e) => setEditing((x) => ({ ...x, feedback: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Follow-up done</span>
+                      <div className="mt-1 flex gap-4">
+                        <label className="inline-flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                          <input
+                            type="radio"
+                            checked={!!editing.followup_call_done}
+                            onChange={() => setEditing((x) => ({ ...x, followup_call_done: true }))}
+                          />
+                          Yes
+                        </label>
+                        <label className="inline-flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                          <input
+                            type="radio"
+                            checked={!editing.followup_call_done}
+                            onChange={() => setEditing((x) => ({ ...x, followup_call_done: false }))}
+                          />
+                          No
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900 sm:px-5">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(null)}
+                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-600"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingEdit}
+                      className="rounded-lg bg-bajaj-orange px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {savingEdit ? "Saving…" : "Save changes"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : null}
 
             <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 text-center text-[10px] text-slate-500 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-400 sm:px-6">
               Bajaj Service Center — for official use only

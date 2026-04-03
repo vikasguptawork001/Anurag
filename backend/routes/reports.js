@@ -7,16 +7,17 @@ router.use(authMiddleware);
 
 router.get("/overview", async (_req, res) => {
   try {
-    const [[veh]] = await pool.query("SELECT COUNT(*) AS c FROM vehicles");
-    const [[srv]] = await pool.query("SELECT COUNT(*) AS c FROM service_records");
-    const [[calls]] = await pool.query("SELECT COUNT(*) AS c FROM call_records");
+    const [[veh]] = await pool.query("SELECT COUNT(*) AS c FROM vehicles WHERE archived_at IS NULL");
+    const [[srv]] = await pool.query("SELECT COUNT(*) AS c FROM service_records WHERE archived_at IS NULL");
+    const [[calls]] = await pool.query("SELECT COUNT(*) AS c FROM call_records WHERE archived_at IS NULL");
     const [[pend]] = await pool.query(
       `SELECT COUNT(*) AS c FROM reminders WHERE status = 'PENDING'`
     );
     const [byMonth] = await pool.query(
       `SELECT DATE_FORMAT(service_date, '%Y-%m') AS ym, COUNT(*) AS cnt
        FROM service_records
-       WHERE service_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+       WHERE archived_at IS NULL
+       AND service_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
        GROUP BY ym ORDER BY ym`
     );
     res.json({
@@ -40,7 +41,7 @@ router.get("/services", async (req, res) => {
       SELECT sr.*, v.vehicle_number, v.owner_name, v.owner_phone, v.vehicle_model
       FROM service_records sr
       JOIN vehicles v ON v.id = sr.vehicle_id
-      WHERE 1=1
+      WHERE sr.archived_at IS NULL AND v.archived_at IS NULL
     `;
     const p = [];
     if (from) {
@@ -69,7 +70,7 @@ router.get("/calls", async (req, res) => {
       FROM call_records c
       JOIN vehicles v ON v.id = c.vehicle_id
       LEFT JOIN users u ON u.id = c.user_id
-      WHERE 1=1
+      WHERE c.archived_at IS NULL
     `;
     const p = [];
     if (from) {
@@ -105,6 +106,7 @@ router.get("/reminders-open", async (_req, res) => {
        JOIN service_records sr ON sr.id = r.service_record_id
        JOIN vehicles v ON v.id = r.vehicle_id
        WHERE r.status = 'PENDING'
+       AND sr.archived_at IS NULL AND v.archived_at IS NULL
        ORDER BY sr.next_due_date ASC
        LIMIT 500`
     );

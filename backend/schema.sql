@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
   owner_address TEXT,
   vehicle_model VARCHAR(120),
   avg_daily_km DECIMAL(10,2) NOT NULL DEFAULT 10,
+  archived_at DATETIME NULL DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -33,6 +34,7 @@ CREATE TABLE IF NOT EXISTS service_records (
   next_due_date DATE,
   feedback TEXT,
   followup_call_done TINYINT(1) NOT NULL DEFAULT 0,
+  archived_at DATETIME NULL DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE,
   INDEX idx_vehicle (vehicle_id),
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS call_records (
   new_next_due_km INT NULL,
   called_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   user_id INT NULL,
+  archived_at DATETIME NULL DEFAULT NULL,
   FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE,
   FOREIGN KEY (service_record_id) REFERENCES service_records(id) ON DELETE SET NULL,
   FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE SET NULL,

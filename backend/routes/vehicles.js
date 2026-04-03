@@ -45,22 +45,109 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.patch("/by-id/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Invalid vehicle id" });
+    }
+    const { owner_name, owner_phone, owner_address, vehicle_model, avg_daily_km } = req.body;
+    const [curRows] = await pool.execute("SELECT * FROM vehicles WHERE id = ?", [id]);
+    if (!curRows.length) {
+      return res.status(404).json({ error: "Vehicle not found" });
+    }
+    const cur = curRows[0];
+    const name = owner_name !== undefined ? String(owner_name).trim() : cur.owner_name;
+    if (!name) {
+      return res.status(400).json({ error: "Owner name is required" });
+    }
+    const km = avg_daily_km !== undefined ? Number(avg_daily_km) : Number(cur.avg_daily_km);
+    if (Number.isNaN(km) || km <= 0) {
+      return res.status(400).json({ error: "Average daily KM must be a positive number" });
+    }
+    const [result] = await pool.execute(
+      `UPDATE vehicles SET
+        owner_name = ?,
+        owner_phone = ?,
+        owner_address = ?,
+        vehicle_model = ?,
+        avg_daily_km = ?
+       WHERE id = ? AND archived_at IS NULL`,
+      [
+        name,
+        owner_phone !== undefined ? owner_phone?.trim() || null : cur.owner_phone,
+        owner_address !== undefined ? owner_address?.trim() || null : cur.owner_address,
+        vehicle_model !== undefined ? vehicle_model?.trim() || null : cur.vehicle_model,
+        km,
+        id,
+      ]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Vehicle not found or archived" });
+    }
+    const [rows] = await pool.execute("SELECT * FROM vehicles WHERE id = ?", [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update vehicle" });
+  }
+});
+
+router.put("/by-id/:id/archive", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Invalid vehicle id" });
+    }
+    const [result] = await pool.execute(
+      `UPDATE vehicles SET archived_at = CURRENT_TIMESTAMP WHERE id = ? AND archived_at IS NULL`,
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Vehicle not found or already archived" });
+    }
+    res.json({ ok: true, id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not archive vehicle" });
+  }
+});
+
+router.put("/by-id/:id/restore", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Invalid vehicle id" });
+    }
+    const [result] = await pool.execute(`UPDATE vehicles SET archived_at = NULL WHERE id = ?`, [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Vehicle not found" });
+    }
+    const [rows] = await pool.execute("SELECT * FROM vehicles WHERE id = ?", [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not restore vehicle" });
+  }
+});
+
 router.get("/", async (req, res) => {
   try {
     const q = req.query.q?.trim();
+    const includeArchived = req.query.include_archived === "1" || req.query.include_archived === "true";
+    const archSql = includeArchived ? "TRUE" : "archived_at IS NULL";
     let rows;
     if (q) {
       const like = `%${q}%`;
       [rows] = await pool.execute(
         `SELECT * FROM vehicles
-         WHERE vehicle_number LIKE ? OR owner_name LIKE ?
+         WHERE (vehicle_number LIKE ? OR owner_name LIKE ?)
+         AND (${archSql})
          ORDER BY created_at DESC`,
         [like, like]
       );
     } else {
-      [rows] = await pool.execute(
-        "SELECT * FROM vehicles ORDER BY created_at DESC"
-      );
+      [rows] = await pool.execute(`SELECT * FROM vehicles WHERE ${archSql} ORDER BY created_at DESC`);
     }
     res.json(rows);
   } catch (err) {

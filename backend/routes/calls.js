@@ -27,7 +27,7 @@ router.get("/", async (req, res) => {
       FROM call_records c
       INNER JOIN vehicles v ON v.id = c.vehicle_id
       LEFT JOIN users u ON u.id = c.user_id
-      WHERE 1=1
+      WHERE c.archived_at IS NULL
     `;
     const params = [];
     if (vehicleId && !Number.isNaN(vehicleId)) {
@@ -86,15 +86,18 @@ router.post("/", async (req, res) => {
 
     await conn.beginTransaction();
 
-    const [[veh]] = await conn.execute("SELECT id FROM vehicles WHERE id = ?", [vid]);
+    const [[veh]] = await conn.execute(
+      "SELECT id FROM vehicles WHERE id = ? AND archived_at IS NULL",
+      [vid]
+    );
     if (!veh) {
       await conn.rollback();
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Vehicle not found or archived" });
     }
 
     if (!srId || Number.isNaN(srId)) {
       const [latest] = await conn.execute(
-        `SELECT id FROM service_records WHERE vehicle_id = ? ORDER BY service_date DESC, id DESC LIMIT 1`,
+        `SELECT id FROM service_records WHERE vehicle_id = ? AND archived_at IS NULL ORDER BY service_date DESC, id DESC LIMIT 1`,
         [vid]
       );
       if (!latest.length) {
@@ -105,7 +108,7 @@ router.post("/", async (req, res) => {
     }
 
     const [srows] = await conn.execute(
-      `SELECT id, vehicle_id, next_due_date, next_due_km FROM service_records WHERE id = ? FOR UPDATE`,
+      `SELECT id, vehicle_id, next_due_date, next_due_km FROM service_records WHERE id = ? AND archived_at IS NULL FOR UPDATE`,
       [srId]
     );
     if (!srows.length || Number(srows[0].vehicle_id) !== vid) {
@@ -207,6 +210,75 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: "Could not log call" });
   } finally {
     conn.release();
+  }
+});
+
+router.patch("/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Invalid call id" });
+    }
+    const { outcome, notes } = req.body;
+    const allowed = [
+      "CONTACTED",
+      "NO_ANSWER",
+      "CALLBACK_REQUESTED",
+      "RESCHEDULED",
+      "ADJUSTED_DUE",
+      "OTHER",
+    ];
+    const [rows] = await pool.execute(
+      `SELECT c.* FROM call_records c WHERE c.id = ? AND c.archived_at IS NULL`,
+      [id]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: "Call log not found" });
+    }
+    const cur = rows[0];
+    const oc =
+      outcome !== undefined ? String(outcome).toUpperCase() : cur.outcome;
+    if (!allowed.includes(oc)) {
+      return res.status(400).json({ error: "Invalid outcome" });
+    }
+    const noteVal = notes !== undefined ? notes?.trim() || null : cur.notes;
+    await pool.execute(`UPDATE call_records SET outcome = ?, notes = ? WHERE id = ? AND archived_at IS NULL`, [
+      oc,
+      noteVal,
+      id,
+    ]);
+    const [[row]] = await pool.execute(
+      `SELECT c.*, v.vehicle_number, v.owner_name, u.username AS logged_by_username
+       FROM call_records c
+       JOIN vehicles v ON v.id = c.vehicle_id
+       LEFT JOIN users u ON u.id = c.user_id
+       WHERE c.id = ?`,
+      [id]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not update call log" });
+  }
+});
+
+router.put("/:id/archive", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Invalid call id" });
+    }
+    const [result] = await pool.execute(
+      `UPDATE call_records SET archived_at = CURRENT_TIMESTAMP WHERE id = ? AND archived_at IS NULL`,
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Call log not found or already archived" });
+    }
+    res.json({ ok: true, id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Could not archive call log" });
   }
 });
 
